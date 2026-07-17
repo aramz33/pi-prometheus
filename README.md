@@ -27,6 +27,12 @@ scrapes the Prometheus text format. No runtime dependencies, no daemon, no push 
 ## Install
 
 ```bash
+pi install npm:pi-prometheus
+```
+
+Or straight from the repo:
+
+```bash
 pi install git:github.com/aramz33/pi-prometheus
 ```
 
