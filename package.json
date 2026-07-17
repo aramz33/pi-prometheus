@@ -1,0 +1,22 @@
+{
+  "name": "pi-prometheus",
+  "version": "0.1.0",
+  "description": "Prometheus exporter extension for the Pi coding agent — per-session /metrics with file-based service discovery, works with any number of parallel sessions",
+  "keywords": ["pi-package", "pi", "prometheus", "metrics", "observability", "grafana", "victoriametrics"],
+  "license": "MIT",
+  "author": "Adam Ramsis",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aramz33/pi-prometheus.git"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "PI_PROMETHEUS_DIR=$(mktemp -d) node test/check.ts"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./extensions"]
+  }
+}

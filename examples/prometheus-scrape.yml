@@ -1,0 +1,11 @@
+# Prometheus scrape config for pi-prometheus.
+# Each Pi session registers itself in ~/.pi/metrics/targets/ — file_sd picks
+# sessions up and drops them automatically, no reload needed.
+scrape_configs:
+  - job_name: pi
+    scrape_interval: 15s
+    file_sd_configs:
+      - files:
+          # replace <you> — Prometheus does not expand ~
+          - /Users/<you>/.pi/metrics/targets/*.json
+        refresh_interval: 15s

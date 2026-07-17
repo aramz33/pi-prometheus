@@ -1,0 +1,11 @@
+# VictoriaMetrics (single-node or vmagent) scrape config for pi-prometheus.
+# VM reads Prometheus-format scrape configs natively:
+#   victoria-metrics -promscrape.config=victoriametrics-scrape.yml
+scrape_configs:
+  - job_name: pi
+    scrape_interval: 15s
+    file_sd_configs:
+      - files:
+          # replace <you> — the config parser does not expand ~
+          - /Users/<you>/.pi/metrics/targets/*.json
+        refresh_interval: 15s
