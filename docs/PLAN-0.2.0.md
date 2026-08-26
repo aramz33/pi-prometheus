@@ -68,12 +68,12 @@ pi_compaction_failures_total{reason}            counter
 pi_prometheus_build_info{version,pi_version}    gauge
 ```
 
-`kind` est un ensemble fermé : `tool`, `skill`, `context_file`, `prompt_section`, `other`. `source` est borné par les paquets installés. `name` est le seul non borné, donc plafonné.
+`kind` est un ensemble fermé de quatre : `tool`, `skill`, `context_file`, `prompt_section`. `source` est borné par les paquets installés. `name` est le seul non borné, donc plafonné.
 
 Garde fous de cardinalité, parce que 100 skills fois N sessions explose vite :
 
 - `PI_PROMETHEUS_ATTRIBUTION` vaut `off`, `rollup` (par `source` seulement) ou `full` (défaut)
-- `PI_PROMETHEUS_ATTRIBUTION_TOP_N`, défaut 30, le reste tombe dans une série `other`
+- `PI_PROMETHEUS_ATTRIBUTION_TOP_N`, défaut 100, la queue se replie par genre et par source dans `name="_other"`, jamais dans un seau global : mesuré en vrai, un seau global cachait 84 pour cent du total et rendait `sum by (source)` muet
 - `pi_context_static_tokens` reste le total vrai, insensible au plafond
 
 Deux pièges à ne pas ignorer :
