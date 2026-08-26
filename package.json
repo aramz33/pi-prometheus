@@ -1,22 +1,51 @@
 {
   "name": "pi-prometheus",
   "version": "0.1.0",
-  "description": "Prometheus exporter extension for the Pi coding agent — per-session /metrics with file-based service discovery, works with any number of parallel sessions",
-  "keywords": ["pi-package", "pi", "prometheus", "metrics", "observability", "grafana", "victoriametrics"],
+  "description": "See what your Pi session actually costs: a per-source context breakdown in the terminal showing which extension, skill or MCP server eats your window, plus a /metrics endpoint and Grafana dashboards.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "prometheus",
+    "metrics",
+    "observability",
+    "grafana",
+    "victoriametrics",
+    "pi-extension",
+    "pi-coding-agent",
+    "coding-agent",
+    "tokens",
+    "cost-tracking",
+    "context-window"
+  ],
   "license": "MIT",
   "author": "Adam Ramsis",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aramz33/pi-prometheus.git"
   },
+  "bugs": {
+    "url": "https://github.com/aramz33/pi-prometheus/issues"
+  },
+  "homepage": "https://github.com/aramz33/pi-prometheus#readme",
   "type": "module",
+  "files": [
+    "extensions",
+    "examples",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "scripts": {
-    "test": "PI_PROMETHEUS_DIR=$(mktemp -d) node test/check.ts"
+    "test": "node test/check.ts"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": ">=0.80.0"
   },
   "pi": {
-    "extensions": ["./extensions"]
+    "extensions": ["./extensions"],
+    "image": "https://raw.githubusercontent.com/aramz33/pi-prometheus/v0.2.0/examples/media/context-budget.png"
   }
 }

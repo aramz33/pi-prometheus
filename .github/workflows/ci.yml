@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The Windows leg is the point of the matrix: it is what proves the test suite
+  # creates its own temp dir instead of relying on a POSIX `$(mktemp -d)`.
+  test:
+    name: test (node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["22.19", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+
+  # The exposition format is checked by promtool rather than by a regex, and the
+  # shipped example rules and scrape config are checked so we never publish a file
+  # Prometheus would refuse to load.
+  promtool:
+    name: promtool
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Run the suite and dump the captured /metrics body
+        env:
+          PI_PROMETHEUS_DUMP: ${{ github.workspace }}/metrics.txt
+        run: npm test
+
+      - name: Check the exposition format
+        run: |
+          test -s metrics.txt
+          docker run --rm -i --entrypoint promtool prom/prometheus:latest \
+            check metrics < metrics.txt
+
+      - name: Check the alert rules
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE/examples:/examples:ro" \
+            --entrypoint promtool prom/prometheus:latest \
+            check rules /examples/alerts.yml
+
+      - name: Unit-test the alert rules
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo:ro" \
+            --entrypoint promtool prom/prometheus:latest \
+            test rules /repo/test/alerts_test.yml
+
+      - name: Check the scrape config
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE/examples:/examples:ro" \
+            --entrypoint promtool prom/prometheus:latest \
+            check config /examples/prometheus-scrape.yml
+
+  # The tarball must carry the extension and must not carry the test suite.
+  pack:
+    name: pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Pack and inspect the tarball contents
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e '
+            const pack = JSON.parse(require("fs").readFileSync("pack.json", "utf8"));
+            const files = (pack[0].files || []).map((f) => f.path);
+            const entry = files.find((p) => p === "extensions/prometheus.ts");
+            if (!entry) {
+              throw new Error("extension entry missing from tarball:\n" + files.join("\n"));
+            }
+            const leaked = files.filter((p) => p.startsWith("test/"));
+            if (leaked.length) {
+              throw new Error("test files leaked into tarball: " + leaked.join(", "));
+            }
+            console.log("tarball OK, " + files.length + " files, entry present, no test/");
+          '

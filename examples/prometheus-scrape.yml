@@ -1,6 +1,12 @@
 # Prometheus scrape config for pi-prometheus.
 # Each Pi session registers itself in ~/.pi/metrics/targets/ — file_sd picks
 # sessions up and drops them automatically, no reload needed.
+
+# Alerting rules shipped alongside this file. Relative paths resolve against
+# the directory holding this config.
+rule_files:
+  - alerts.yml
+
 scrape_configs:
   - job_name: pi
     scrape_interval: 15s

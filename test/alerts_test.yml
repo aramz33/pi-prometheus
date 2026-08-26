@@ -1,0 +1,131 @@
+rule_files:
+  - ../examples/alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # PiContextFootprintHigh: 40000 / 200000 = 20% > 15%, held past 10m
+  - interval: 1m
+    input_series:
+      - series: 'pi_context_static_tokens{job="pi",instance="i1",session_id="s1",cwd="/w"}'
+        values: '40000+0x20'
+      - series: 'pi_context_window_tokens{job="pi",instance="i1",session_id="s1",cwd="/w"}'
+        values: '200000+0x20'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: PiContextFootprintHigh
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: PiContextFootprintHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: pi
+              instance: i1
+              session_id: s1
+              cwd: /w
+            exp_annotations:
+              summary: 'Static context is 20% of the window in session s1'
+              description: 'Every request in /w pays this before you type a word. Run /context-budget in that session to see which package, skill or context file is responsible, then uninstall it, narrow its tool set, or move the context file out of the project root.'
+
+  # A zero window must produce no series at all, not NaN or +Inf
+  - interval: 1m
+    input_series:
+      - series: 'pi_context_static_tokens{job="pi",instance="i1",session_id="s1",cwd="/w"}'
+        values: '40000+0x20'
+      - series: 'pi_context_window_tokens{job="pi",instance="i1",session_id="s1",cwd="/w"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PiContextFootprintHigh
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: PiSessionNearCompaction
+        exp_alerts: []
+
+  # A session that never reported a window must produce no alert
+  - interval: 1m
+    input_series:
+      - series: 'pi_context_static_tokens{job="pi",instance="i1",session_id="s1",cwd="/w"}'
+        values: '40000+0x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PiContextFootprintHigh
+        exp_alerts: []
+
+  # PiSessionNearCompaction: 180000 / 200000 = 90% > 85%
+  - interval: 1m
+    input_series:
+      - series: 'pi_context_tokens{job="pi",instance="i1",session_id="s1",cwd="/w"}'
+        values: '180000+0x20'
+      - series: 'pi_context_window_tokens{job="pi",instance="i1",session_id="s1",cwd="/w"}'
+        values: '200000+0x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PiSessionNearCompaction
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: PiSessionNearCompaction
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: pi
+              instance: i1
+              session_id: s1
+              cwd: /w
+            exp_annotations:
+              summary: 'Session s1 is at 90% of its context window'
+              description: 'Compaction is close in /w, and a compaction loses detail from the conversation. Finish or checkpoint the current task, then start a fresh session with /new rather than letting the history be summarised away mid-task.'
+
+  # PiToolErrorRateHigh: 1 error per 2 calls per minute = 50%, on plenty of volume
+  - interval: 1m
+    input_series:
+      - series: 'pi_tool_calls_total{job="pi",instance="i1",session_id="s1",cwd="/w",tool="bash"}'
+        values: '0+2x40'
+      - series: 'pi_tool_errors_total{job="pi",instance="i1",session_id="s1",cwd="/w",tool="bash"}'
+        values: '0+1x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PiToolErrorRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: pi
+              instance: i1
+              session_id: s1
+              cwd: /w
+              tool: bash
+            exp_annotations:
+              summary: 'Tool bash is failing 50% of calls in session s1'
+              description: "Over the last 15 minutes more than one call in five to bash failed, on at least five calls. The agent is burning tokens on retries. Check that tool's configuration in /w: wrong path, missing credential, or a permission prompt nobody answered."
+
+  # Too few calls to judge: 2 errors out of 3 calls is 67% but must stay quiet
+  - interval: 1m
+    input_series:
+      - series: 'pi_tool_calls_total{job="pi",instance="i1",session_id="s1",cwd="/w",tool="bash"}'
+        values: '0 1 2 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3'
+      - series: 'pi_tool_errors_total{job="pi",instance="i1",session_id="s1",cwd="/w",tool="bash"}'
+        values: '0 1 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: PiToolErrorRateHigh
+        exp_alerts: []
+
+  # PiSpendRateHigh: 0.1 USD per minute = 6.00 USD per hour > 5
+  - interval: 1m
+    input_series:
+      - series: 'pi_cost_usd_total{job="pi",instance="i1",session_id="s1",cwd="/w"}'
+        values: '0+0.1x60'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: PiSpendRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: pi
+              instance: i1
+              session_id: s1
+              cwd: /w
+            exp_annotations:
+              summary: 'Session s1 is spending $6.00 per hour'
+              description: 'Sustained for ten minutes in /w. Either the session is looping, or the context is large enough that every turn is expensive. Check the context usage panel first: a session near its window costs the full window on every turn.'

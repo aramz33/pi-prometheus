@@ -1,0 +1,16 @@
+# Grafana dashboard provider for examples/docker-compose.yml.
+# It reads the rewritten copies produced by the dashboard-prep service, not the
+# published files in examples/ directly.
+apiVersion: 1
+
+providers:
+  - name: pi-prometheus
+    orgId: 1
+    folder: Pi
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana-dashboards
+      foldersFromFilesStructure: false

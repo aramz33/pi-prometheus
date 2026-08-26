@@ -1,0 +1,247 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    }
+  ],
+  "title": "Pi context attribution",
+  "uid": "pi-prometheus-attribution",
+  "description": "Which package, skill or context file eats the context window before you type anything.",
+  "tags": ["pi", "pi-prometheus", "attribution"],
+  "timezone": "browser",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "15s",
+  "templating": {
+    "list": [
+      {
+        "name": "job",
+        "label": "Job",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(pi_session_info, job)",
+        "current": { "selected": false, "text": "pi", "value": "pi" },
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1
+      },
+      {
+        "name": "session",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(pi_session_info{job=\"$job\"}, session_id)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "bargauge",
+      "title": "Context tax by package",
+      "description": "Tokens each installed package adds to every single request.",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum by (source) (pi_context_footprint_tokens{job=\"$job\", session_id=~\"$session\"})",
+          "legendFormat": "{{source}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "continuous-GrYlRd" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Largest entries",
+      "description": "Top 20 individual entries by estimated static token cost.",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "topk(20, pi_context_footprint_tokens{job=\"$job\", session_id=~\"$session\"})",
+          "instant": true,
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "cwd": true,
+              "pid": true,
+              "session_id": true
+            },
+            "indexByName": { "kind": 0, "name": 1, "source": 2, "Value": 3 },
+            "renameByName": { "Value": "tokens" }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": { "fields": {}, "sort": [{ "field": "tokens", "desc": true }] }
+        }
+      ],
+      "options": { "showHeader": true, "footer": { "show": true, "reducer": ["sum"], "fields": ["tokens"] } },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0 },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "tokens" },
+            "properties": [{ "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient" } }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Tokens before you type",
+      "description": "Total static context, and the share of the window it already occupies.",
+      "gridPos": { "x": 0, "y": 9, "w": 6, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "pi_context_static_tokens{job=\"$job\", session_id=~\"$session\"}",
+          "legendFormat": "tokens",
+          "instant": true,
+          "refId": "A"
+        },
+        {
+          "expr": "pi_context_static_tokens{job=\"$job\", session_id=~\"$session\"} / (pi_context_window_tokens{job=\"$job\", session_id=~\"$session\"} > 0)",
+          "legendFormat": "% of window",
+          "instant": true,
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byFrameRefID", "options": "B" },
+            "properties": [
+              { "id": "unit", "value": "percentunit" },
+              { "id": "decimals", "value": 1 },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 0.15 },
+                    { "color": "red", "value": 0.3 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Static footprint over time",
+      "description": "Installing a heavy package shows up as a step.",
+      "gridPos": { "x": 6, "y": 9, "w": 18, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum by (source) (pi_context_footprint_tokens{job=\"$job\", session_id=~\"$session\"})",
+          "legendFormat": "{{source}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(pi_context_static_tokens{job=\"$job\", session_id=~\"$session\"})",
+          "legendFormat": "total (static)",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": { "lineInterpolation": "stepAfter", "fillOpacity": 20, "stacking": { "mode": "normal", "group": "A" } }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byFrameRefID", "options": "B" },
+            "properties": [
+              { "id": "custom.stacking", "value": { "mode": "none", "group": "A" } },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "custom.lineWidth", "value": 2 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "bargauge",
+      "title": "Runtime ingestion by source (tokens/s)",
+      "description": "Tokens pulled in while the session runs: skill bodies read on demand, tool output, context files re-read.",
+      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum by (source) (rate(pi_source_tokens_total{job=\"$job\", session_id=~\"$session\"}[$__rate_interval]))",
+          "legendFormat": "{{source}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 2, "color": { "mode": "continuous-BlPu" } },
+        "overrides": []
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

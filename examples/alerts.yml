@@ -1,0 +1,80 @@
+# Alerting rules for pi-prometheus.
+#
+# Load them from your Prometheus config:
+#   rule_files:
+#     - alerts.yml
+#
+# Every ratio divides by a series filtered with a positive-value matcher, so a
+# session that has not reported yet, or that reports a zero denominator,
+# produces no series at all instead of NaN or +Inf. Labels come from the
+# file_sd target file, so session_id and cwd are always present.
+groups:
+  - name: pi-prometheus
+    interval: 30s
+    rules:
+      - alert: PiContextFootprintHigh
+        expr: |
+          pi_context_static_tokens
+            /
+          (pi_context_window_tokens > 0)
+            > 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Static context is {{ $value | humanizePercentage }} of the window in session {{ $labels.session_id }}'
+          description: >-
+            Every request in {{ $labels.cwd }} pays this before you type a word.
+            Run /context-budget in that session to see which package, skill or
+            context file is responsible, then uninstall it, narrow its tool set,
+            or move the context file out of the project root.
+
+      - alert: PiSessionNearCompaction
+        expr: |
+          pi_context_tokens
+            /
+          (pi_context_window_tokens > 0)
+            > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Session {{ $labels.session_id }} is at {{ $value | humanizePercentage }} of its context window'
+          description: >-
+            Compaction is close in {{ $labels.cwd }}, and a compaction loses
+            detail from the conversation. Finish or checkpoint the current task,
+            then start a fresh session with /new rather than letting the history
+            be summarised away mid-task.
+
+      - alert: PiToolErrorRateHigh
+        expr: |
+          sum by (job, instance, session_id, cwd, tool) (increase(pi_tool_errors_total[15m]))
+            /
+          (sum by (job, instance, session_id, cwd, tool) (increase(pi_tool_calls_total[15m])) >= 5)
+            > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Tool {{ $labels.tool }} is failing {{ $value | humanizePercentage }} of calls in session {{ $labels.session_id }}'
+          description: >-
+            Over the last 15 minutes more than one call in five to
+            {{ $labels.tool }} failed, on at least five calls. The agent is
+            burning tokens on retries. Check that tool's configuration in
+            {{ $labels.cwd }}: wrong path, missing credential, or a permission
+            prompt nobody answered.
+
+      - alert: PiSpendRateHigh
+        expr: |
+          sum by (job, instance, session_id, cwd) (rate(pi_cost_usd_total[15m])) * 3600
+            > 5
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Session {{ $labels.session_id }} is spending ${{ $value | printf "%.2f" }} per hour'
+          description: >-
+            Sustained for ten minutes in {{ $labels.cwd }}. Either the session is
+            looping, or the context is large enough that every turn is expensive.
+            Check the context usage panel first: a session near its window costs
+            the full window on every turn.
