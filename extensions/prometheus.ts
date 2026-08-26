@@ -15,7 +15,7 @@
  *
  * Override the target directory with PI_PROMETHEUS_DIR.
  * PI_PROMETHEUS_ATTRIBUTION         off | rollup | full   (default full)
- * PI_PROMETHEUS_ATTRIBUTION_TOP_N   named series kept      (default 30)
+ * PI_PROMETHEUS_ATTRIBUTION_TOP_N   named series kept      (default 100)
  * PI_PROMETHEUS_STATUS              off | port | full      (default port)
  */
 import type {
@@ -45,7 +45,7 @@ const TURN_BUCKETS = [5, 15, 30, 60, 120, 300, 600];
 // ===========================================================================
 
 /** Closed set. An unbounded `kind` would be a cardinality bomb by itself. */
-export type FootprintKind = "tool" | "skill" | "context_file" | "prompt_section" | "other";
+export type FootprintKind = "tool" | "skill" | "context_file" | "prompt_section";
 
 export type AttributionMode = "off" | "rollup" | "full";
 
@@ -301,21 +301,26 @@ function byTokensDesc(a: FootprintPart, b: FootprintPart): number {
 }
 
 /**
- * Keep the top N named series and fold the tail into one `other` series. The
- * tail is folded, not dropped, so a sum over the family still lands on the
- * truth. A cap of zero or less means no cap.
+ * Keep the top N named series and fold the tail per kind and per source, into
+ * `name="_other"` rows. The tail is folded, not dropped, so a sum over the
+ * family still lands on the truth; and because only `name` collapses, the two
+ * aggregates anyone actually queries, `sum by (source)` and `sum by (kind)`,
+ * stay exact however hard the cap bites. A cap of zero or less means no cap.
+ *
+ * A single global bucket would not: with hundreds of skills installed, which is
+ * ordinary, the tail is most of the footprint, and folding it flat renames it
+ * to nothing. The added series are bounded by the distinct (kind, source) pairs
+ * in the tail, so by the installed packages times four kinds.
  */
 export function capParts(parts: readonly FootprintPart[], topN: number): FootprintPart[] {
 	const sorted = [...parts].sort(byTokensDesc);
 	if (!Number.isFinite(topN) || topN <= 0 || sorted.length <= topN) return sorted;
-	const kept = sorted.slice(0, topN);
-	const folded = sorted.slice(topN).reduce((n, p) => n + p.tokens, 0);
-	kept.push({ kind: "other", name: "other", source: "other", tokens: folded });
-	return kept;
+	const folded = mergeParts(sorted.slice(topN).map((p) => ({ ...p, name: "_other" })));
+	return [...sorted.slice(0, topN), ...folded.sort(byTokensDesc)];
 }
 
 /**
- * Collapse the only unbounded label. `kind` stays: it is a closed set of five,
+ * Collapse the only unbounded label. `kind` stays: it is a closed set of four,
  * so keeping it tells the user more at no cardinality cost.
  */
 export function rollupParts(parts: readonly FootprintPart[]): FootprintPart[] {
@@ -331,7 +336,9 @@ export function attributionMode(): AttributionMode {
 export function attributionTopN(): number {
 	const raw = process.env.PI_PROMETHEUS_ATTRIBUTION_TOP_N;
 	const n = raw === undefined ? Number.NaN : Number(raw);
-	return Number.isFinite(n) ? n : 30;
+	// The cap no longer decides whether the numbers are right, only how many
+	// rows carry a name, so it can afford to name a whole ordinary install.
+	return Number.isFinite(n) ? n : 100;
 }
 
 /** Mode then cap, in that order: the shape that reaches the exposition. */
@@ -401,16 +408,21 @@ export function buildBudgetReport(input: BudgetReportInput): string[] {
 	const L: string[] = ["context budget", RULE];
 
 	const counts = new Map<string, number>();
-	for (const p of fp.parts) counts.set(p.source, (counts.get(p.source) ?? 0) + 1);
+	const bySource = new Map<string, number>();
+	for (const p of fp.parts) {
+		counts.set(p.source, (counts.get(p.source) ?? 0) + 1);
+		bySource.set(p.source, (bySource.get(p.source) ?? 0) + p.tokens);
+	}
 	L.push(
 		padRight("by source", 46) + padLeft("entries", 10) + padLeft("tokens", 10) + padLeft("share", 10),
 	);
-	for (const p of rollupParts(fp.parts.map((q) => ({ ...q, kind: "other" as const })))) {
+	const sources = [...bySource].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+	for (const [source, tokens] of sources) {
 		L.push(
-			padRight(p.source, 46) +
-				padLeft(String(counts.get(p.source) ?? 0), 10) +
-				padLeft(String(p.tokens), 10) +
-				padLeft(share(p.tokens, fp.total), 10),
+			padRight(source, 46) +
+				padLeft(String(counts.get(source) ?? 0), 10) +
+				padLeft(String(tokens), 10) +
+				padLeft(share(tokens, fp.total), 10),
 		);
 	}
 

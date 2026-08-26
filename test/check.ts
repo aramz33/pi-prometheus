@@ -236,6 +236,24 @@ function samples(body: string, family: string): Array<{ labels: string; value: n
 	return out;
 }
 
+/** One label's value out of an exposition label set. */
+function labelOf(labels: string, name: string): string {
+	return labels.match(new RegExp(`${name}="([^"]*)"`))?.[1] ?? "";
+}
+
+/** A family summed by one label, the shape every dashboard panel queries. */
+function sumBy(body: string, family: string, label: string): Map<string, number> {
+	const out = new Map<string, number>();
+	for (const sample of samples(body, family)) {
+		const key = labelOf(sample.labels, label);
+		out.set(key, (out.get(key) ?? 0) + sample.value);
+	}
+	return out;
+}
+
+const byKey = (m: Map<string, number>) => [...m].sort((x, y) => x[0].localeCompare(y[0]));
+const bump = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
+
 function valueOf(body: string, line: RegExp): number {
 	const m = body.match(line);
 	assert.ok(m, `no line matching ${line}\n--- got:\n${body}`);
@@ -521,8 +539,10 @@ assert.match(await metrics(b.port()), /^pi_tokens_total\{type="input"\} 7$/m, "i
 assertCountersAreZero(await metrics(a.port()), "instance A after a turn on instance B");
 
 // --- top-N cap ---------------------------------------------------------------
-// 50 tools, a cap of 5: five named series plus one `other`, and the total is
-// still the untruncated truth because the tail is folded, not dropped.
+// 50 tools over 4 packages, a cap of 5: five named series, and the tail folded
+// per (kind, source) rather than into one opaque bucket. The total is still the
+// untruncated truth because the tail is folded, not dropped, and so is every
+// per-source and per-kind sum, which is the part a global bucket destroyed.
 
 const MANY_TOOLS = Array.from({ length: 50 }, (_, i) => ({
 	name: `tool_${String(i).padStart(2, "0")}`,
@@ -544,16 +564,26 @@ await c.fire("before_agent_start", {
 const capped = await metrics(c.port());
 delete process.env.PI_PROMETHEUS_ATTRIBUTION_TOP_N;
 
+if (process.env.PI_PROMETHEUS_DUMP) {
+	fs.writeFileSync(`${process.env.PI_PROMETHEUS_DUMP}.folded`, capped);
+}
+
 const cappedSamples = samples(capped, "pi_context_footprint_tokens");
-assert.equal(cappedSamples.length, 6, `expected 5 named series plus one other\n--- got:\n${capped}`);
-assert.equal(
-	cappedSamples.filter((s) => s.labels === '{kind="other",name="other",source="other"}').length,
-	1,
-	`the folded tail is not a single other series\n--- got:\n${capped}`,
-);
+
 // the untruncated total, computed here from the fixtures alone
 const untruncated =
 	MANY_TOOLS.reduce((n, t) => n + tok(toolSchemaText(t as any).length), 0) + tok(BASE_TEXT.length);
+const capTrueBySource = new Map<string, number>();
+const capTrueByKind = new Map<string, number>();
+for (const t of MANY_TOOLS) {
+	const tokens = tok(toolSchemaText(t as any).length);
+	bump(capTrueBySource, t.sourceInfo.source, tokens);
+	bump(capTrueByKind, "tool", tokens);
+}
+bump(capTrueBySource, "builtin", tok(BASE_TEXT.length));
+bump(capTrueByKind, "prompt_section", tok(BASE_TEXT.length));
+
+// what is true, before what is shaped: the cap never moves the real total
 assert.match(
 	capped,
 	new RegExp(`^pi_context_static_tokens ${untruncated}$`, "m"),
@@ -564,6 +594,158 @@ assert.equal(
 	untruncated,
 	"the folded tail lost tokens",
 );
+// and the two aggregates every dashboard panel draws stay exact under the cap
+assert.deepEqual(
+	byKey(sumBy(capped, "pi_context_footprint_tokens", "source")),
+	byKey(capTrueBySource),
+	`sum by (source) over the capped series is not the per-source truth\n--- got:\n${capped}`,
+);
+assert.deepEqual(
+	byKey(sumBy(capped, "pi_context_footprint_tokens", "kind")),
+	byKey(capTrueByKind),
+	`sum by (kind) over the capped series is not the per-kind truth\n--- got:\n${capped}`,
+);
+
+// then the shape. The five largest tools stay named; the tail is 45 tools plus
+// base_instructions, so it folds into four kind=tool rows, one per package, and
+// one kind=prompt_section row: five named series plus five folded ones.
+assert.equal(
+	cappedSamples.length,
+	10,
+	`expected 5 named series plus one _other per (kind, source)\n--- got:\n${capped}`,
+);
+assert.equal(
+	cappedSamples.filter((s) => labelOf(s.labels, "name") === "_other").length,
+	5,
+	`the folded tail is not one _other series per (kind, source)\n--- got:\n${capped}`,
+);
+assert.ok(
+	!capped.includes('kind="other"') && !capped.includes('source="other"'),
+	`the tail was folded into one opaque global bucket\n--- got:\n${capped}`,
+);
+// base_instructions is the only prompt_section here, so its folded row is exact
+assert.ok(
+	capped.includes(
+		`pi_context_footprint_tokens{kind="prompt_section",name="_other",source="builtin"} ${tok(BASE_TEXT.length)}`,
+	),
+	`the folded row lost its own kind and source\n--- got:\n${capped}`,
+);
+
+// --- a session shaped like a real one, at the default cap --------------------
+// Hundreds of skills from a handful of packages, which is ordinary. This is the
+// case the old global `other` bucket destroyed: at the default cap it swallowed
+// 84 percent of the footprint into one anonymous row, and the release's headline
+// panel, sum by (source), then had nothing to say. The assertion below is the
+// whole point of the fold: the per-source totals survive the cap exactly, even
+// though most names do not.
+
+const BIG_SKILL_SOURCES = ["auto", "npm:pi-skills-mega", "local"];
+const BIG_SKILLS = Array.from({ length: 250 }, (_, i) => {
+	const id = `skill_${String(i).padStart(3, "0")}`;
+	return {
+		name: id,
+		description: "y".repeat(20 + (i % 40) * 5),
+		filePath: `/pkg/skills/${id}/SKILL.md`,
+		baseDir: `/pkg/skills/${id}`,
+		sourceInfo: { source: BIG_SKILL_SOURCES[i % BIG_SKILL_SOURCES.length] },
+	};
+});
+const BIG_TOOLS = [
+	{
+		name: "read",
+		description: "Read the contents of a file",
+		parameters: { type: "object", properties: { path: { type: "string" } } },
+		sourceInfo: { source: "builtin" },
+	},
+	...Array.from({ length: 39 }, (_, i) => ({
+		name: `mcp_tool_${String(i).padStart(2, "0")}`,
+		description: "z".repeat(15 + i * 3),
+		parameters: { type: "object", properties: {} },
+		sourceInfo: { source: i % 2 === 0 ? "builtin" : "npm:pi-m365" },
+	})),
+];
+const BIG_ACTIVE = BIG_TOOLS.map((t) => t.name);
+const BIG_PROMPT =
+	BASE_TEXT + SKILLS_HEADER + BIG_SKILLS.map(skillBlockText).join("") + SKILLS_FOOTER;
+
+// no PI_PROMETHEUS_ATTRIBUTION_TOP_N here: this exercises the default
+const f = newInstance({ tools: BIG_TOOLS, activeTools: BIG_ACTIVE });
+await f.fire("session_start", { type: "session_start", reason: "startup" });
+await waitFor(() => f.port() > 0, "sixth instance port");
+await f.fire("before_agent_start", {
+	...BEFORE_AGENT_START,
+	systemPromptOptions: {
+		cwd: "/tmp/fake-project",
+		selectedTools: BIG_ACTIVE,
+		skills: BIG_SKILLS,
+		contextFiles: [],
+	},
+	systemPrompt: BIG_PROMPT,
+});
+const big = await metrics(f.port());
+
+const bigTrueBySource = new Map<string, number>();
+const bigTrueByKind = new Map<string, number>();
+for (const sk of BIG_SKILLS) {
+	const tokens = tok(skillBlockText(sk).length);
+	bump(bigTrueBySource, sk.sourceInfo.source, tokens);
+	bump(bigTrueByKind, "skill", tokens);
+}
+for (const t of BIG_TOOLS) {
+	const tokens = tok(toolSchemaText(t as any).length);
+	bump(bigTrueBySource, t.sourceInfo.source, tokens);
+	bump(bigTrueByKind, "tool", tokens);
+}
+for (const chars of [SKILLS_HEADER.length + SKILLS_FOOTER.length, BASE_TEXT.length]) {
+	bump(bigTrueBySource, "builtin", tok(chars));
+	bump(bigTrueByKind, "prompt_section", tok(chars));
+}
+
+assert.deepEqual(
+	byKey(sumBy(big, "pi_context_footprint_tokens", "source")),
+	byKey(bigTrueBySource),
+	`sum by (source) lost the truth at the default cap\n--- got:\n${big}`,
+);
+assert.deepEqual(
+	byKey(sumBy(big, "pi_context_footprint_tokens", "kind")),
+	byKey(bigTrueByKind),
+	`sum by (kind) lost the truth at the default cap\n--- got:\n${big}`,
+);
+
+const bigSamples = samples(big, "pi_context_footprint_tokens");
+const bigNamed = bigSamples.filter((x) => labelOf(x.labels, "name") !== "_other");
+// the default cap, pinned: change the constant and this is what moves
+assert.equal(bigNamed.length, 100, `the default cap is not 100 named series\n--- got:\n${big}`);
+// three skill packages, two tool packages and Pi's own scaffolding: six folded
+// rows, each still saying which package and which kind it stands for
+assert.equal(
+	bigSamples.length - bigNamed.length,
+	6,
+	`the tail did not fold per (kind, source)\n--- got:\n${big}`,
+);
+const bigTotal = [...bigTrueBySource.values()].reduce((n, v) => n + v, 0);
+assert.match(
+	big,
+	new RegExp(`^pi_context_static_tokens ${bigTotal}$`, "m"),
+	`the default cap moved pi_context_static_tokens\n--- got:\n${big}`,
+);
+assert.equal(
+	bigSamples.reduce((n, x) => n + x.value, 0),
+	bigTotal,
+	"the folded tail lost tokens at the default cap",
+);
+
+// the terminal report is built from the uncapped parts, so no `_other` reaches
+// it and its by-source table is the truth to the token
+await f.run("context-budget");
+const bigReport: string[] = f.entries[0].data.lines;
+assert.ok(!bigReport.some((l) => l.includes("_other")), "the report leaked a folded row");
+for (const [source, tokens] of bigTrueBySource) {
+	assert.ok(
+		bigReport.some((l) => l.startsWith(source) && l.includes(String(tokens))),
+		`the report's by-source table lost ${source}\n--- got:\n${bigReport.join("\n")}`,
+	);
+}
 
 // --- a tool_result with no usage at all, on a clean instance -----------------
 // Pi 0.80 has no `usage` on tool_result. Not one nested series may appear.
@@ -738,6 +920,26 @@ const cappedParts = capParts(many, 3);
 assert.equal(cappedParts.length, 4);
 assert.equal(cappedParts.reduce((n, p) => n + p.tokens, 0), 55);
 assert.equal(capParts(many, 0).length, 10, "a cap of zero must mean no cap");
+
+// and the fold is per kind and per source, never one bucket for everything
+const mixed = [
+	{ kind: "tool" as const, name: "big", source: "npm:a", tokens: 100 },
+	{ kind: "tool" as const, name: "t1", source: "npm:a", tokens: 3 },
+	{ kind: "tool" as const, name: "t2", source: "npm:a", tokens: 2 },
+	{ kind: "skill" as const, name: "s1", source: "npm:b", tokens: 5 },
+	{ kind: "skill" as const, name: "s2", source: "npm:b", tokens: 4 },
+	{ kind: "skill" as const, name: "s3", source: "local", tokens: 1 },
+];
+assert.deepEqual(
+	capParts(mixed, 1),
+	[
+		{ kind: "tool", name: "big", source: "npm:a", tokens: 100 },
+		{ kind: "skill", name: "_other", source: "npm:b", tokens: 9 },
+		{ kind: "tool", name: "_other", source: "npm:a", tokens: 5 },
+		{ kind: "skill", name: "_other", source: "local", tokens: 1 },
+	],
+	"the tail did not fold per (kind, source)",
+);
 assert.equal(rollupParts(many).length, 1, "rollup did not collapse the name label");
 
 // tool_result.usage shapes, the Pi 0.80 guard
@@ -789,7 +991,7 @@ assert.ok(!fs.existsSync(targetFilePath()), "target file not removed on shutdown
 
 // a second shutdown (Pi can fire it on quit after an error path) must not throw
 await a.fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
-for (const inst of [b, c, d, e]) {
+for (const inst of [b, c, d, e, f]) {
 	await inst.fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
 	await inst.fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
 }
