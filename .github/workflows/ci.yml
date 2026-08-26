@@ -84,9 +84,14 @@ jobs:
           node -e '
             const pack = JSON.parse(require("fs").readFileSync("pack.json", "utf8"));
             const files = (pack[0].files || []).map((f) => f.path);
-            const entry = files.find((p) => p === "extensions/prometheus.ts");
-            if (!entry) {
-              throw new Error("extension entry missing from tarball:\n" + files.join("\n"));
+            // Assert what the manifest actually promises, not a path frozen here:
+            // if pi.extensions moves again, this fails instead of passing stale.
+            const manifest = JSON.parse(require("fs").readFileSync("package.json", "utf8"));
+            for (const declared of manifest.pi.extensions) {
+              const want = declared.replace(/^\.\//, "");
+              if (!files.includes(want)) {
+                throw new Error("declared extension entry " + want + " missing from tarball:\n" + files.join("\n"));
+              }
             }
             const leaked = files.filter((p) => p.startsWith("test/"));
             if (leaked.length) {
