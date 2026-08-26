@@ -1,0 +1,82 @@
+# Local Prometheus + Grafana for pi-prometheus.
+#
+#   1. replace <you> in the pi-targets bind mount below
+#   2. docker compose -f examples/docker-compose.yml up -d
+#   3. pi
+#   4. http://localhost:3000 → folder "Pi" → both dashboards, filled in under a
+#      minute (15s scrape, 15s file_sd refresh)
+#
+# Grafana runs with anonymous admin access. This stack listens on localhost and
+# is meant for one developer's laptop, nothing else.
+#
+# macOS and Windows work as written. On Linux, host.docker.internal points at
+# the host bridge address and will NOT reach a listener bound to the host
+# loopback, which is where Pi binds. Give the prometheus service
+# `network_mode: host` instead, and drop its ports/extra_hosts entries.
+
+name: pi-prometheus
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    ports:
+      - "127.0.0.1:9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./provisioning/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts.yml:/etc/prometheus/alerts.yml:ro
+      # replace <you>, Docker Compose does not expand ~
+      # The directory must exist before the stack starts. Pi creates it on its
+      # first run; otherwise: mkdir -p ~/.pi/metrics/targets
+      - /Users/<you>/.pi/metrics/targets:/pi-targets:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+
+  # The two dashboards carry the grafana.com "${DS_PROMETHEUS}" input
+  # placeholder, which is what grafana.com's importer resolves. File
+  # provisioning never resolves it: Grafana expands environment variables in
+  # provisioning configs but never inside dashboard JSON. So bind the
+  # placeholder to the provisioned datasource uid before Grafana reads it.
+  dashboard-prep:
+    image: alpine:3.22
+    volumes:
+      - ./grafana-dashboard.json:/in/grafana-dashboard.json:ro
+      - ./grafana-dashboard-attribution.json:/in/grafana-dashboard-attribution.json:ro
+      - grafana-dashboards:/out
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        for f in /in/*.json; do
+          sed 's/[$$]{DS_PROMETHEUS}/pi-prometheus-ds/g' "$$f" > "/out/$$(basename "$$f")"
+        done
+
+  grafana:
+    image: grafana/grafana:13.2.0
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+      dashboard-prep:
+        condition: service_completed_successfully
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_DEFAULT_THEME: dark
+    volumes:
+      - ./provisioning/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./provisioning/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana-dashboards:/var/lib/grafana-dashboards
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  grafana-dashboards:

@@ -16,10 +16,21 @@
   "templating": {
     "list": [
       {
+        "name": "job",
+        "label": "Job",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(pi_session_info, job)",
+        "current": { "selected": false, "text": "pi", "value": "pi" },
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1
+      },
+      {
         "name": "session",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-        "query": "label_values(pi_session_info, session_id)",
+        "query": "label_values(pi_session_info{job=\"$job\"}, session_id)",
         "includeAll": true,
         "multi": true,
         "refresh": 2
@@ -33,7 +44,7 @@
       "title": "Sessions online",
       "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "count(up{job=\"pi\"} == 1)", "refId": "A" }]
+      "targets": [{ "expr": "count(up{job=\"$job\"} == 1)", "refId": "A" }]
     },
     {
       "id": 2,
@@ -41,7 +52,7 @@
       "title": "Total cost (USD)",
       "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "sum(pi_cost_usd_total{session_id=~\"$session\"})", "refId": "A" }],
+      "targets": [{ "expr": "sum(pi_cost_usd_total{job=\"$job\", session_id=~\"$session\"})", "refId": "A" }],
       "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 }, "overrides": [] }
     },
     {
@@ -52,7 +63,7 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         {
-          "expr": "pi_context_tokens{session_id=~\"$session\"} / pi_context_window_tokens{session_id=~\"$session\"}",
+          "expr": "pi_context_tokens{job=\"$job\", session_id=~\"$session\"} / pi_context_window_tokens{job=\"$job\", session_id=~\"$session\"}",
           "legendFormat": "{{session_id}}",
           "refId": "A"
         }
@@ -79,7 +90,7 @@
       "title": "Turns",
       "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "sum(pi_turns_total{session_id=~\"$session\"})", "refId": "A" }]
+      "targets": [{ "expr": "sum(pi_turns_total{job=\"$job\", session_id=~\"$session\"})", "refId": "A" }]
     },
     {
       "id": 5,
@@ -89,7 +100,7 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         {
-          "expr": "sum by (type) (rate(pi_tokens_total{session_id=~\"$session\"}[5m])) * 60",
+          "expr": "sum by (type) (rate(pi_tokens_total{job=\"$job\", session_id=~\"$session\"}[$__rate_interval])) * 60",
           "legendFormat": "{{type}}",
           "refId": "A"
         }
@@ -103,7 +114,7 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         {
-          "expr": "sum by (tool) (rate(pi_tool_calls_total{session_id=~\"$session\"}[5m])) * 60",
+          "expr": "sum by (tool) (rate(pi_tool_calls_total{job=\"$job\", session_id=~\"$session\"}[$__rate_interval])) * 60",
           "legendFormat": "{{tool}}",
           "refId": "A"
         }
@@ -117,12 +128,12 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(pi_turn_duration_seconds_bucket{session_id=~\"$session\"}[15m])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(pi_turn_duration_seconds_bucket{job=\"$job\", session_id=~\"$session\"}[$__rate_interval])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.9, sum by (le) (rate(pi_turn_duration_seconds_bucket{session_id=~\"$session\"}[15m])))",
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(pi_turn_duration_seconds_bucket{job=\"$job\", session_id=~\"$session\"}[$__rate_interval])))",
           "legendFormat": "p90",
           "refId": "B"
         }
@@ -137,7 +148,7 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         {
-          "expr": "sum by (tool) (rate(pi_tool_errors_total{session_id=~\"$session\"}[5m])) * 60",
+          "expr": "sum by (tool) (rate(pi_tool_errors_total{job=\"$job\", session_id=~\"$session\"}[$__rate_interval])) * 60",
           "legendFormat": "{{tool}}",
           "refId": "A"
         }

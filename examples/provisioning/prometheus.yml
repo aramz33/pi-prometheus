@@ -1,0 +1,26 @@
+# Prometheus config used by examples/docker-compose.yml.
+# Every path below is a CONTAINER path: the compose file bind mounts the host's
+# ~/.pi/metrics/targets directory at /pi-targets. See prometheus-scrape.yml for
+# the version you would use when running Prometheus directly on the host.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: pi
+    scrape_interval: 15s
+    file_sd_configs:
+      - files:
+          - /pi-targets/*.json
+        refresh_interval: 15s
+    relabel_configs:
+      # Pi binds /metrics on the host loopback, so each target file says
+      # 127.0.0.1:<port>. Inside this container 127.0.0.1 is the container
+      # itself, so rewrite the host part and leave the port alone.
+      - source_labels: [__address__]
+        regex: '127\.0\.0\.1:(\d+)'
+        target_label: __address__
+        replacement: 'host.docker.internal:$1'
