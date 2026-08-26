@@ -1,6 +1,6 @@
 {
   "name": "pi-prometheus",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "See what your Pi session actually costs: a per-source context breakdown in the terminal showing which extension, skill or MCP server eats your window, plus a /metrics endpoint and Grafana dashboards.",
   "keywords": [
     "pi-package",
@@ -46,7 +46,9 @@
     "@earendil-works/pi-coding-agent": ">=0.80.0"
   },
   "pi": {
-    "extensions": ["./extensions/prometheus/index.ts"],
+    "extensions": [
+      "./extensions/prometheus/index.ts"
+    ],
     "image": "https://raw.githubusercontent.com/aramz33/pi-prometheus/v0.2.0/examples/media/context-budget.png"
   }
 }
