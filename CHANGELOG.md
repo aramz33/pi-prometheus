@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skill, or MCP server is eating my context window":
   `pi_context_footprint_tokens{kind,name,source}`, `pi_context_static_tokens`,
   `pi_source_tokens_total{kind,name,source}`. `kind` is one of `tool`, `skill`,
-  `context_file`, `prompt_section`, `other`; `source` is the installed package
-  (`builtin`, `npm:<package>`, `git:<repo>`, `local`).
+  `context_file`, `prompt_section`; `source` is the installed package
+  (`builtin`, `npm:<package>`, `git:<repo>`, `local`), or `auto` for a resource Pi
+  discovered in a conventional directory rather than one that arrived in a package.
 - **Nested-token accounting** for sub-agent tool calls:
   `pi_tool_nested_tokens_total{tool,type}` and `pi_tool_nested_cost_usd_total{tool}`.
   Emitted only when the host Pi reports `usage` on `tool_result`, so older hosts simply
@@ -25,9 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/metrics` prints the current session's numbers plus the scrape URL.
 - **Status line control** via `PI_PROMETHEUS_STATUS` (`off`, `port` default, `full`).
 - **Cardinality guards** for the attribution series: `PI_PROMETHEUS_ATTRIBUTION`
-  (`off`, `rollup`, `full` default) and `PI_PROMETHEUS_ATTRIBUTION_TOP_N` (default 30,
-  the tail collapses into a single `other` series). `pi_context_static_tokens` always
-  reports the true total, unaffected by the cap.
+  (`off`, `rollup`, `full` default) and `PI_PROMETHEUS_ATTRIBUTION_TOP_N` (default 100,
+  the tail collapses per kind and source into `name="_other"`, so `sum by (source)` and
+  `sum by (kind)` stay exact). `pi_context_static_tokens` always reports the true total,
+  unaffected by the cap.
 - New examples: `examples/grafana-dashboard-attribution.json`, `examples/alerts.yml`,
   `examples/docker-compose.yml`, and a generated `examples/media/context-budget.png`.
 - Packaging metadata: explicit `files`, `engines.node`, `bugs`, `homepage`, and `pi.image`
