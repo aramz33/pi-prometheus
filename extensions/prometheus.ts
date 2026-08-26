@@ -40,29 +40,34 @@ interface State {
 	startTime: number;
 }
 
-const state: State = {
-	tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
-	costUsd: 0,
-	turns: 0,
-	toolCalls: new Map(),
-	toolErrors: new Map(),
-	compactions: new Map(),
-	turnBucketCounts: TURN_BUCKETS.map(() => 0),
-	turnDurationSum: 0,
-	turnDurationCount: 0,
-	contextTokens: null,
-	contextWindow: null,
-	model: "",
-	sessionId: "",
-	cwd: "",
-	startTime: Date.now() / 1000,
-};
+// Pi caches the extension module per {cwd, generation} and only clears that cache
+// on reload, so on /new, resume and fork the factory is re-invoked while anything
+// held at module scope survives. Session state is therefore built per session.
+function newState(): State {
+	return {
+		tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+		costUsd: 0,
+		turns: 0,
+		toolCalls: new Map(),
+		toolErrors: new Map(),
+		compactions: new Map(),
+		turnBucketCounts: TURN_BUCKETS.map(() => 0),
+		turnDurationSum: 0,
+		turnDurationCount: 0,
+		contextTokens: null,
+		contextWindow: null,
+		model: "",
+		sessionId: "",
+		cwd: "",
+		startTime: Date.now() / 1000,
+	};
+}
 
 function esc(v: string): string {
 	return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
 }
 
-function renderMetrics(): string {
+function renderMetrics(state: State): string {
 	const L: string[] = [];
 	const line = (name: string, value: number, labels?: Record<string, string>) => {
 		const l = labels
@@ -132,7 +137,7 @@ function targetFile(): string {
 	return path.join(TARGETS_DIR, `${process.pid}.json`);
 }
 
-function writeTargetFile(port: number): void {
+function writeTargetFile(port: number, state: State): void {
 	fs.mkdirSync(TARGETS_DIR, { recursive: true });
 	const body = {
 		targets: [`127.0.0.1:${port}`],
@@ -152,6 +157,29 @@ function removeTargetFile(): void {
 	}
 }
 
+/**
+ * Signal 0 only probes; the error tells us what the pid is doing. ESRCH is the
+ * one answer that means gone. EPERM means very much alive, just owned by
+ * another user, and anything else means we do not know — so we keep the target.
+ * `kill` is injectable for the unit test.
+ */
+export function isAlive(
+	pid: number,
+	kill: (pid: number, signal: number) => void = (p, s) => process.kill(p, s),
+): boolean {
+	try {
+		kill(pid, 0);
+		return true;
+	} catch (err) {
+		return (err as NodeJS.ErrnoException).code !== "ESRCH";
+	}
+}
+
+// A crash between writeFileSync and renameSync leaves a <pid>.json.tmp behind.
+// Reap it, but only once it has sat still long enough that no live rename can
+// be in flight over it.
+const TMP_MAX_AGE_MS = 60_000;
+
 function cleanStaleTargets(): void {
 	let entries: string[];
 	try {
@@ -159,22 +187,32 @@ function cleanStaleTargets(): void {
 	} catch {
 		return;
 	}
+	const now = Date.now();
 	for (const name of entries) {
+		const isTmp = name.endsWith(".json.tmp");
+		if (!isTmp && !name.endsWith(".json")) continue;
 		const pid = Number.parseInt(name, 10);
-		if (!name.endsWith(".json") || Number.isNaN(pid) || pid === process.pid) continue;
-		try {
-			process.kill(pid, 0); // throws if the process is gone
-		} catch {
+		if (Number.isNaN(pid) || pid === process.pid) continue;
+		if (isAlive(pid)) continue;
+		if (isTmp) {
+			let mtimeMs: number;
 			try {
-				fs.unlinkSync(path.join(TARGETS_DIR, name));
+				mtimeMs = fs.statSync(path.join(TARGETS_DIR, name)).mtimeMs;
 			} catch {
-				/* raced with another session's cleanup */
+				continue; /* gone already */
 			}
+			if (now - mtimeMs < TMP_MAX_AGE_MS) continue;
+		}
+		try {
+			fs.unlinkSync(path.join(TARGETS_DIR, name));
+		} catch {
+			/* raced with another session's cleanup */
 		}
 	}
 }
 
 export default function prometheusExporter(pi: ExtensionAPI): void {
+	let state = newState();
 	let server: http.Server | undefined;
 	let port = 0;
 	let turnStartedAt = 0;
@@ -190,7 +228,7 @@ export default function prometheusExporter(pi: ExtensionAPI): void {
 		server = http.createServer((req, res) => {
 			if (req.url === "/metrics") {
 				res.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" });
-				res.end(renderMetrics());
+				res.end(renderMetrics(state));
 			} else {
 				res.writeHead(404);
 				res.end();
@@ -199,19 +237,23 @@ export default function prometheusExporter(pi: ExtensionAPI): void {
 		server.unref(); // never keep the pi process alive on our account
 		server.listen(0, "127.0.0.1", () => {
 			port = (server!.address() as { port: number }).port;
-			writeTargetFile(port);
+			writeTargetFile(port, state);
 			ctx.ui.setStatus("prometheus", `metrics :${port}`);
 		});
 	}
 
 	pi.on("session_start", (_event, ctx) => {
+		// Unconditional: this fires again on /new, resume and fork, and the
+		// counters of the session that just ended must not carry over.
+		state = newState();
+		turnStartedAt = 0;
 		state.sessionId = ctx.sessionManager.getSessionId();
 		state.cwd = ctx.cwd;
 		state.model = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "";
 		refreshContextGauges(ctx);
 		cleanStaleTargets();
 		ensureServer(ctx);
-		if (port) writeTargetFile(port); // session id may have changed (new/resume/fork)
+		if (port) writeTargetFile(port, state); // session id may have changed (new/resume/fork)
 	});
 
 	pi.on("model_select", (event) => {
