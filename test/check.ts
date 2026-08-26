@@ -9,6 +9,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+/**
+ * Skill matching runs through path.resolve, so a POSIX literal becomes
+ * "D:\\pkg\\..." on Windows while the fixture stays "/pkg/...", and nothing
+ * matches. Resolving both sides keeps the fixture native on every platform.
+ */
+const NP = (p: string) => path.resolve(p);
+
 // The extension resolves TARGETS_DIR at module load, so the env has to be set
 // before the import — hence the dynamic import below rather than a static one.
 const DIR = process.env.PI_PROMETHEUS_DIR ?? fs.mkdtempSync(path.join(os.tmpdir(), "pi-prom-"));
@@ -52,15 +59,15 @@ const SKILLS = [
 	{
 		name: "pdf",
 		description: "Fill and read PDF forms",
-		filePath: "/pkg/skills/pdf/SKILL.md",
-		baseDir: "/pkg/skills/pdf",
+		filePath: NP("/pkg/skills/pdf/SKILL.md"),
+		baseDir: NP("/pkg/skills/pdf"),
 		sourceInfo: { source: "npm:pi-skills-pack" },
 	},
 	{
 		name: "docx",
 		description: "Edit Word documents in place",
-		filePath: "/tmp/fake-project/.pi/skills/docx/SKILL.md",
-		baseDir: "/tmp/fake-project/.pi/skills/docx",
+		filePath: NP("/tmp/fake-project/.pi/skills/docx/SKILL.md"),
+		baseDir: NP("/tmp/fake-project/.pi/skills/docx"),
 		sourceInfo: { source: "local" },
 	},
 ];
@@ -342,7 +349,7 @@ await a.fire("tool_result", {
 	type: "tool_result",
 	toolCallId: "t3",
 	toolName: "read",
-	input: { path: "/pkg/skills/pdf/SKILL.md" },
+	input: { path: NP("/pkg/skills/pdf/SKILL.md") },
 	content: [{ type: "text", text: "y".repeat(800) }],
 	isError: false,
 });
@@ -645,8 +652,8 @@ const BIG_SKILLS = Array.from({ length: 250 }, (_, i) => {
 	return {
 		name: id,
 		description: "y".repeat(20 + (i % 40) * 5),
-		filePath: `/pkg/skills/${id}/SKILL.md`,
-		baseDir: `/pkg/skills/${id}`,
+		filePath: NP(`/pkg/skills/${id}/SKILL.md`),
+		baseDir: NP(`/pkg/skills/${id}`),
 		sourceInfo: { source: BIG_SKILL_SOURCES[i % BIG_SKILL_SOURCES.length] },
 	};
 });
@@ -951,9 +958,23 @@ assert.deepEqual(readNestedUsage({ input: 1, output: 2 }), {
 });
 
 // skill directory matching
-assert.equal(skillForPath(SKILLS, "/pkg/skills/pdf/reference/forms.md", "/tmp")?.name, "pdf");
-assert.equal(skillForPath(SKILLS, "SKILL.md", "/tmp/fake-project/.pi/skills/docx")?.name, "docx");
-assert.equal(skillForPath(SKILLS, "/pkg/skills/pdf-other/SKILL.md", "/tmp"), undefined);
+assert.equal(skillForPath(SKILLS, NP("/pkg/skills/pdf/reference/forms.md"), NP("/tmp"))?.name, "pdf");
+assert.equal(skillForPath(SKILLS, "SKILL.md", NP("/tmp/fake-project/.pi/skills/docx"))?.name, "docx");
+assert.equal(skillForPath(SKILLS, NP("/pkg/skills/pdf-other/SKILL.md"), NP("/tmp")), undefined);
+
+// Case folding follows the platform, and only win32 is case insensitive by
+// spec. A case insensitive volume on another platform is a filesystem
+// property, not a platform one, so folding there could attribute a read to
+// the wrong skill on a case sensitive volume.
+{
+	const shouted = NP("/PKG/SKILLS/PDF/SKILL.MD");
+	const hit = skillForPath(SKILLS, shouted, NP("/tmp"))?.name;
+	if (process.platform === "win32") {
+		assert.equal(hit, "pdf", "win32 is case insensitive, the read was not attributed");
+	} else {
+		assert.equal(hit, undefined, "this platform is case sensitive, the read must not match");
+	}
+}
 
 // --- .tmp orphan reaping -----------------------------------------------------
 // A crash between writeFileSync and renameSync leaves <pid>.json.tmp behind.

@@ -363,8 +363,14 @@ export function skillForPath(
 	filePath: string,
 	cwd: string,
 ): SkillLike | undefined {
-	const abs = path.resolve(cwd, filePath);
-	return skills.find(
-		(s) => abs === s.filePath || abs === s.baseDir || abs.startsWith(s.baseDir + path.sep),
-	);
+	// Windows paths are case insensitive, and a model routinely emits a drive
+	// letter or a separator in the other case than the one Pi recorded. Comparing
+	// raw strings there silently attributes a skill read to nothing at all.
+	const fold = (v: string) => (process.platform === "win32" ? v.toLowerCase() : v);
+	const abs = fold(path.resolve(cwd, filePath));
+	return skills.find((s) => {
+		const file = fold(s.filePath);
+		const base = fold(s.baseDir);
+		return abs === file || abs === base || abs.startsWith(base + path.sep);
+	});
 }
