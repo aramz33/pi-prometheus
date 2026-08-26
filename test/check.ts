@@ -28,7 +28,7 @@ const {
 	readNestedUsage,
 	rollupParts,
 	skillForPath,
-} = await import("../extensions/prometheus.ts");
+} = await import("../extensions/prometheus/index.ts");
 
 type Handler = (event: any, ctx: any) => unknown;
 

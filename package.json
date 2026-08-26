@@ -39,13 +39,14 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "test": "node test/check.ts"
+    "test": "node test/check.ts",
+    "poster": "node scripts/poster.mjs"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.80.0"
   },
   "pi": {
-    "extensions": ["./extensions"],
+    "extensions": ["./extensions/prometheus/index.ts"],
     "image": "https://raw.githubusercontent.com/aramz33/pi-prometheus/v0.2.0/examples/media/context-budget.png"
   }
 }
