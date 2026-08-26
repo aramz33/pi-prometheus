@@ -19,7 +19,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildBudgetReport } from "../extensions/prometheus.ts";
+import { buildBudgetReport } from "../extensions/prometheus/report.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(ROOT, "examples", "media");
@@ -44,30 +44,34 @@ const ZOOM = 2;
 // through a package.
 // ---------------------------------------------------------------------------
 
-const MCP = "npm:pi-mcp-adapter";
-const WEB = "npm:pi-web-access";
+// Invented packages, deliberately. The numbers below are a fixture, and a
+// fixture must not put a share of someone's context window on a package a
+// reader could go and look up. `builtin`, `local` and `auto` are Pi's own
+// source values and name nobody.
+const OFFICE = "npm:acme-office";
+const SEARCH = "npm:acme-search";
 /** Pi's label for a resource found by convention, not installed as a package. */
 const AUTO = "auto";
 
 /** [kind, name, source, tokens] */
 const PARTS = [
-	// The MCP adapter ships one schema per remote operation. This is the story.
-	["tool", "m365_mail_search", MCP, 4470],
-	["tool", "m365_calendar_events", MCP, 4020],
-	["tool", "m365_teams_messages", MCP, 3730],
-	["tool", "m365_site_search", MCP, 3520],
-	["tool", "m365_files_search", MCP, 3406],
-	["tool", "m365_user_lookup", MCP, 2940],
-	["tool", "m365_mail_send", MCP, 2710],
-	["tool", "m365_contacts_list", MCP, 2180],
-	["tool", "m365_drive_upload", MCP, 1965],
-	["tool", "m365_group_members", MCP, 1840],
-	["tool", "m365_notebook_pages", MCP, 1721],
-	["tool", "m365_meeting_notes", MCP, 1457],
-	["tool", "m365_presence_get", MCP, 1420],
+	// This one adapter ships a schema per remote operation. That is the story.
+	["tool", "acme_mail_search", OFFICE, 4470],
+	["tool", "acme_calendar_events", OFFICE, 4020],
+	["tool", "acme_chat_messages", OFFICE, 3730],
+	["tool", "acme_site_search", OFFICE, 3520],
+	["tool", "acme_files_search", OFFICE, 3406],
+	["tool", "acme_user_lookup", OFFICE, 2940],
+	["tool", "acme_mail_send", OFFICE, 2710],
+	["tool", "acme_contacts_list", OFFICE, 2180],
+	["tool", "acme_drive_upload", OFFICE, 1965],
+	["tool", "acme_group_members", OFFICE, 1840],
+	["tool", "acme_notebook_pages", OFFICE, 1721],
+	["tool", "acme_meeting_notes", OFFICE, 1457],
+	["tool", "acme_presence_get", OFFICE, 1420],
 
-	["tool", "web_fetch", WEB, 1480],
-	["tool", "web_search", WEB, 1120],
+	["tool", "acme_web_fetch", SEARCH, 1480],
+	["tool", "acme_web_search", SEARCH, 1120],
 
 	["tool", "bash", "builtin", 845],
 	["tool", "edit", "builtin", 720],
@@ -75,16 +79,16 @@ const PARTS = [
 	["tool", "write", "builtin", 505],
 	["tool", "todo_write", "builtin", 430],
 
-	["skill", "m365-triage", MCP, 366],
-	["skill", "web-research", WEB, 251],
+	["skill", "acme-office-triage", OFFICE, 366],
+	["skill", "search-tips", SEARCH, 251],
 
 	// Dropped into ~/.pi/agent/skills by hand, so Pi gives them no package name.
-	["skill", "terraform-plan", AUTO, 368],
+	["skill", "infra-plan", AUTO, 368],
 	["skill", "oncall-runbook", AUTO, 355],
 	["skill", "db-migrations", AUTO, 344],
 	["skill", "api-contracts", AUTO, 329],
 	["skill", "deploy-checklist", AUTO, 312],
-	["skill", "k8s-triage", AUTO, 301],
+	["skill", "cluster-triage", AUTO, 301],
 	["skill", "sql-tuning", AUTO, 298],
 	["skill", "release-notes", AUTO, 287],
 	["skill", "pr-review", AUTO, 276],
@@ -104,7 +108,7 @@ const PARTS = [
 /** What the same session then read in, credited on tool_result. */
 const RUNTIME = [
 	["tool", "read", "builtin", 8420],
-	["tool", "web_fetch", WEB, 5310],
+	["tool", "acme_web_fetch", SEARCH, 5310],
 	["tool", "bash", "builtin", 2140],
 	["skill", "deploy-checklist", AUTO, 1290],
 ];
@@ -122,6 +126,12 @@ const lines = buildBudgetReport({
 	runtime,
 	contextWindow: CONTEXT_WINDOW,
 });
+
+// The README shows the same report as a code block; --text is where it comes from.
+if (process.argv.includes("--text")) {
+	console.log(lines.join("\n"));
+	process.exit(0);
+}
 
 // The headline is derived from the same table, never typed by hand.
 const bySource = new Map();
@@ -141,8 +151,11 @@ const CHAR_W = FONT_SIZE * 0.5;
 const LINE_H = 28;
 const MARGIN = 28;
 const PAD_X = 34;
+const GUTTER = 60;
 const BAR_H = 46;
-const HEAD_H = 122;
+/** The headline carries the card: at gallery width it is the only legible type. */
+const HEAD_H = 170;
+const HEAD_SIZE = 60;
 const PAD_BOTTOM = 30;
 
 const COL = {
@@ -161,10 +174,28 @@ const COL = {
 const xmlEscape = (s) =>
 	s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const cols = Math.max(76, ...lines.map((l) => l.length));
-const bodyW = Math.ceil(cols * CHAR_W);
+/**
+ * The builder separates its four blocks with blank lines. Splitting on them is
+ * the only liberty this script takes with the report: every line below is the
+ * builder's own string, placed, coloured, and never rewritten.
+ */
+const blocks = [];
+for (const line of lines) {
+	if (line.trim() === "") blocks.push([]);
+	else (blocks[blocks.length - 1] ?? blocks[blocks.push([]) - 1]).push(line);
+}
+const [sourceBlock, entriesBlock, runtimeBlock, totalsBlock] = blocks.filter((b) => b.length > 0);
+
+// Left: where the tokens come from, and what came in since. Right: the entries,
+// which is the longest block, plus the totals and the caveats under it.
+const left = [...sourceBlock, "", ...runtimeBlock];
+const right = [...entriesBlock, "", ...totalsBlock];
+
+const cols = Math.max(78, ...lines.map((l) => l.length));
+const colW = Math.ceil(cols * CHAR_W);
+const bodyW = colW * 2 + GUTTER;
 const cardW = bodyW + 2 * PAD_X;
-const cardH = BAR_H + HEAD_H + lines.length * LINE_H + PAD_BOTTOM;
+const cardH = BAR_H + HEAD_H + Math.max(left.length, right.length) * LINE_H + PAD_BOTTOM;
 const W = cardW + 2 * MARGIN;
 const H = cardH + 2 * MARGIN;
 
@@ -180,16 +211,21 @@ function classOf(line) {
 	return { fill: COL.text };
 }
 
-const body = lines
-	.map((line, i) => {
-		if (line.trim() === "") return "";
-		const { fill, weight } = classOf(line);
-		const y = MARGIN + BAR_H + HEAD_H + i * LINE_H;
-		const w = weight ? ` font-weight="bold"` : "";
-		return `  <text xml:space="preserve" x="${MARGIN + PAD_X}" y="${y}" fill="${fill}"${w}>${xmlEscape(line)}</text>`;
-	})
-	.filter(Boolean)
-	.join("\n");
+const BODY_TOP = MARGIN + BAR_H + HEAD_H;
+/** Shrink rather than overflow if a longer source name ever leads the table. */
+const headSize = Math.min(HEAD_SIZE, Math.floor(bodyW / (headline.length * 0.5)));
+
+function column(colLines, x) {
+	return colLines
+		.map((line, i) => {
+			if (line.trim() === "") return "";
+			const { fill, weight } = classOf(line);
+			const w = weight ? ` font-weight="bold"` : "";
+			return `  <text xml:space="preserve" x="${x}" y="${BODY_TOP + i * LINE_H}" fill="${fill}"${w}>${xmlEscape(line)}</text>`;
+		})
+		.filter(Boolean)
+		.join("\n");
+}
 
 const dots = ["#ff5f56", "#ffbd2e", "#27c93f"]
 	.map((c, i) => `  <circle cx="${MARGIN + 24 + i * 20}" cy="${MARGIN + BAR_H / 2}" r="6" fill="${c}"/>`)
@@ -202,17 +238,12 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" 
   <line x1="${MARGIN}" y1="${MARGIN + BAR_H}" x2="${MARGIN + cardW}" y2="${MARGIN + BAR_H}" stroke="${COL.edge}"/>
 ${dots}
   <text x="${MARGIN + 104}" y="${MARGIN + BAR_H / 2 + 7}" fill="${COL.dim}" font-size="18">pi /context-budget</text>
-  <text x="${MARGIN + PAD_X}" y="${MARGIN + BAR_H + 44}" fill="${COL.hot}" font-size="27" font-weight="bold">${xmlEscape(headline)}</text>
-  <text x="${MARGIN + PAD_X}" y="${MARGIN + BAR_H + 76}" fill="${COL.dim}" font-size="19">${xmlEscape(subline)}</text>
-${body}
+  <text x="${MARGIN + PAD_X}" y="${MARGIN + BAR_H + 76}" fill="${COL.hot}" font-size="${headSize}" font-weight="bold">${xmlEscape(headline)}</text>
+  <text x="${MARGIN + PAD_X}" y="${MARGIN + BAR_H + 122}" fill="${COL.dim}" font-size="26">${xmlEscape(subline)}</text>
+${column(left, MARGIN + PAD_X)}
+${column(right, MARGIN + PAD_X + colW + GUTTER)}
 </svg>
 `;
-
-// The README shows the same report as a code block; --text is where it comes from.
-if (process.argv.includes("--text")) {
-	console.log(lines.join("\n"));
-	process.exit(0);
-}
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(SVG_PATH, svg);

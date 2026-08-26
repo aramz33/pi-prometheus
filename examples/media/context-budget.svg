@@ -1,42 +1,42 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="904" height="1178" viewBox="0 0 904 1178" font-family="Inconsolata, 'DejaVu Sans Mono', 'Liberation Mono', Menlo, ui-monospace, monospace" font-size="20">
-  <rect x="0" y="0" width="904" height="1178" fill="#05070a"/>
-  <rect x="28" y="28" width="848" height="1122" rx="12" fill="#0d1117" stroke="#272e38"/>
-  <path d="M 28 40 a 12 12 0 0 1 12 -12 h 824 a 12 12 0 0 1 12 12 v 34 h -848 z" fill="#161b22"/>
-  <line x1="28" y1="74" x2="876" y2="74" stroke="#272e38"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1744" height="806" viewBox="0 0 1744 806" font-family="Inconsolata, 'DejaVu Sans Mono', 'Liberation Mono', Menlo, ui-monospace, monospace" font-size="20">
+  <rect x="0" y="0" width="1744" height="806" fill="#05070a"/>
+  <rect x="28" y="28" width="1688" height="750" rx="12" fill="#0d1117" stroke="#272e38"/>
+  <path d="M 28 40 a 12 12 0 0 1 12 -12 h 1664 a 12 12 0 0 1 12 12 v 34 h -1688 z" fill="#161b22"/>
+  <line x1="28" y1="74" x2="1716" y2="74" stroke="#272e38"/>
   <circle cx="52" cy="51" r="6" fill="#ff5f56"/>
   <circle cx="72" cy="51" r="6" fill="#ffbd2e"/>
   <circle cx="92" cy="51" r="6" fill="#27c93f"/>
   <text x="132" y="58" fill="#6e7681" font-size="18">pi /context-budget</text>
-  <text x="62" y="118" fill="#e3b341" font-size="27" font-weight="bold">npm:pi-mcp-adapter fills 71.6% of the static context</text>
-  <text x="62" y="150" fill="#6e7681" font-size="19">49923 tokens on every turn, 3.0x the 16384 token window</text>
-  <text xml:space="preserve" x="62" y="196" fill="#58a6ff" font-weight="bold">context budget</text>
-  <text xml:space="preserve" x="62" y="224" fill="#30363d">----------------------------------------------------------------------------</text>
-  <text xml:space="preserve" x="62" y="252" fill="#58a6ff" font-weight="bold">by source                                        entries    tokens     share</text>
-  <text xml:space="preserve" x="62" y="280" fill="#e3b341">npm:pi-mcp-adapter                                    14     35745     71.6%</text>
-  <text xml:space="preserve" x="62" y="308" fill="#c9d1d9">local                                                  3      3850      7.7%</text>
-  <text xml:space="preserve" x="62" y="336" fill="#c9d1d9">builtin                                                8      3831      7.7%</text>
-  <text xml:space="preserve" x="62" y="364" fill="#c9d1d9">auto                                                  12      3646      7.3%</text>
-  <text xml:space="preserve" x="62" y="392" fill="#c9d1d9">npm:pi-web-access                                      3      2851      5.7%</text>
-  <text xml:space="preserve" x="62" y="448" fill="#58a6ff" font-weight="bold">largest entries                                             tokens     share</text>
-  <text xml:space="preserve" x="62" y="476" fill="#e3b341">tool           m365_mail_search       npm:pi-mcp-adapter      4470      9.0%</text>
-  <text xml:space="preserve" x="62" y="504" fill="#e3b341">tool           m365_calendar_events   npm:pi-mcp-adapter      4020      8.1%</text>
-  <text xml:space="preserve" x="62" y="532" fill="#e3b341">tool           m365_teams_messages    npm:pi-mcp-adapter      3730      7.5%</text>
-  <text xml:space="preserve" x="62" y="560" fill="#e3b341">tool           m365_site_search       npm:pi-mcp-adapter      3520      7.1%</text>
-  <text xml:space="preserve" x="62" y="588" fill="#e3b341">tool           m365_files_search      npm:pi-mcp-adapter      3406      6.8%</text>
-  <text xml:space="preserve" x="62" y="616" fill="#e3b341">tool           m365_user_lookup       npm:pi-mcp-adapter      2940      5.9%</text>
-  <text xml:space="preserve" x="62" y="644" fill="#e3b341">tool           m365_mail_send         npm:pi-mcp-adapter      2710      5.4%</text>
-  <text xml:space="preserve" x="62" y="672" fill="#e3b341">tool           m365_contacts_list     npm:pi-mcp-adapter      2180      4.4%</text>
-  <text xml:space="preserve" x="62" y="700" fill="#c9d1d9">context_file   docs/architecture.md   local                   2130      4.3%</text>
-  <text xml:space="preserve" x="62" y="728" fill="#e3b341">tool           m365_drive_upload      npm:pi-mcp-adapter      1965      3.9%</text>
-  <text xml:space="preserve" x="62" y="756" fill="#6e7681">... and 30 more</text>
-  <text xml:space="preserve" x="62" y="812" fill="#58a6ff" font-weight="bold">loaded at runtime this session                              tokens     share</text>
-  <text xml:space="preserve" x="62" y="840" fill="#c9d1d9">tool           read                   builtin                 8420     49.1%</text>
-  <text xml:space="preserve" x="62" y="868" fill="#c9d1d9">tool           web_fetch              npm:pi-web-access       5310     30.9%</text>
-  <text xml:space="preserve" x="62" y="896" fill="#c9d1d9">tool           bash                   builtin                 2140     12.5%</text>
-  <text xml:space="preserve" x="62" y="924" fill="#c9d1d9">skill          deploy-checklist       auto                    1290      7.5%</text>
-  <text xml:space="preserve" x="62" y="980" fill="#30363d">----------------------------------------------------------------------------</text>
-  <text xml:space="preserve" x="62" y="1008" fill="#f0f6fc" font-weight="bold">static footprint 49923 tokens, 304.7% of the 16384 token window</text>
-  <text xml:space="preserve" x="62" y="1036" fill="#6e7681">estimates only: chars/4, the same heuristic Pi uses to decide when to compact.</text>
-  <text xml:space="preserve" x="62" y="1064" fill="#6e7681">tool schemas are counted as schemas; the one-line tool list inside the system</text>
-  <text xml:space="preserve" x="62" y="1092" fill="#6e7681">prompt is counted under prompt_section, so the two are never added together.</text>
+  <text x="62" y="150" fill="#e3b341" font-size="60" font-weight="bold">npm:acme-office fills 71.6% of the static context</text>
+  <text x="62" y="196" fill="#6e7681" font-size="26">49923 tokens on every turn, 3.0x the 16384 token window</text>
+  <text xml:space="preserve" x="62" y="244" fill="#58a6ff" font-weight="bold">context budget</text>
+  <text xml:space="preserve" x="62" y="272" fill="#30363d">----------------------------------------------------------------------------</text>
+  <text xml:space="preserve" x="62" y="300" fill="#58a6ff" font-weight="bold">by source                                        entries    tokens     share</text>
+  <text xml:space="preserve" x="62" y="328" fill="#e3b341">npm:acme-office                                       14     35745     71.6%</text>
+  <text xml:space="preserve" x="62" y="356" fill="#c9d1d9">local                                                  3      3850      7.7%</text>
+  <text xml:space="preserve" x="62" y="384" fill="#c9d1d9">builtin                                                8      3831      7.7%</text>
+  <text xml:space="preserve" x="62" y="412" fill="#c9d1d9">auto                                                  12      3646      7.3%</text>
+  <text xml:space="preserve" x="62" y="440" fill="#c9d1d9">npm:acme-search                                        3      2851      5.7%</text>
+  <text xml:space="preserve" x="62" y="496" fill="#58a6ff" font-weight="bold">loaded at runtime this session                              tokens     share</text>
+  <text xml:space="preserve" x="62" y="524" fill="#c9d1d9">tool           read                   builtin                 8420     49.1%</text>
+  <text xml:space="preserve" x="62" y="552" fill="#c9d1d9">tool           acme_web_fetch         npm:acme-search         5310     30.9%</text>
+  <text xml:space="preserve" x="62" y="580" fill="#c9d1d9">tool           bash                   builtin                 2140     12.5%</text>
+  <text xml:space="preserve" x="62" y="608" fill="#c9d1d9">skill          deploy-checklist       auto                    1290      7.5%</text>
+  <text xml:space="preserve" x="902" y="244" fill="#58a6ff" font-weight="bold">largest entries                                             tokens     share</text>
+  <text xml:space="preserve" x="902" y="272" fill="#e3b341">tool           acme_mail_search       npm:acme-office         4470      9.0%</text>
+  <text xml:space="preserve" x="902" y="300" fill="#e3b341">tool           acme_calendar_events   npm:acme-office         4020      8.1%</text>
+  <text xml:space="preserve" x="902" y="328" fill="#e3b341">tool           acme_chat_messages     npm:acme-office         3730      7.5%</text>
+  <text xml:space="preserve" x="902" y="356" fill="#e3b341">tool           acme_site_search       npm:acme-office         3520      7.1%</text>
+  <text xml:space="preserve" x="902" y="384" fill="#e3b341">tool           acme_files_search      npm:acme-office         3406      6.8%</text>
+  <text xml:space="preserve" x="902" y="412" fill="#e3b341">tool           acme_user_lookup       npm:acme-office         2940      5.9%</text>
+  <text xml:space="preserve" x="902" y="440" fill="#e3b341">tool           acme_mail_send         npm:acme-office         2710      5.4%</text>
+  <text xml:space="preserve" x="902" y="468" fill="#e3b341">tool           acme_contacts_list     npm:acme-office         2180      4.4%</text>
+  <text xml:space="preserve" x="902" y="496" fill="#c9d1d9">context_file   docs/architecture.md   local                   2130      4.3%</text>
+  <text xml:space="preserve" x="902" y="524" fill="#e3b341">tool           acme_drive_upload      npm:acme-office         1965      3.9%</text>
+  <text xml:space="preserve" x="902" y="552" fill="#6e7681">... and 30 more</text>
+  <text xml:space="preserve" x="902" y="608" fill="#30363d">----------------------------------------------------------------------------</text>
+  <text xml:space="preserve" x="902" y="636" fill="#f0f6fc" font-weight="bold">static footprint 49923 tokens, 304.7% of the 16384 token window</text>
+  <text xml:space="preserve" x="902" y="664" fill="#6e7681">estimates only: chars/4, the same heuristic Pi uses to decide when to compact.</text>
+  <text xml:space="preserve" x="902" y="692" fill="#6e7681">tool schemas are counted as schemas; the one-line tool list inside the system</text>
+  <text xml:space="preserve" x="902" y="720" fill="#6e7681">prompt is counted under prompt_section, so the two are never added together.</text>
 </svg>

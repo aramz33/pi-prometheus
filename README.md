@@ -24,28 +24,28 @@ thing that caused it:
 context budget
 ----------------------------------------------------------------------------
 by source                                        entries    tokens     share
-npm:pi-mcp-adapter                                    14     35745     71.6%
+npm:acme-office                                       14     35745     71.6%
 local                                                  3      3850      7.7%
 builtin                                                8      3831      7.7%
 auto                                                  12      3646      7.3%
-npm:pi-web-access                                      3      2851      5.7%
+npm:acme-search                                        3      2851      5.7%
 
 largest entries                                             tokens     share
-tool           m365_mail_search       npm:pi-mcp-adapter      4470      9.0%
-tool           m365_calendar_events   npm:pi-mcp-adapter      4020      8.1%
-tool           m365_teams_messages    npm:pi-mcp-adapter      3730      7.5%
-tool           m365_site_search       npm:pi-mcp-adapter      3520      7.1%
-tool           m365_files_search      npm:pi-mcp-adapter      3406      6.8%
-tool           m365_user_lookup       npm:pi-mcp-adapter      2940      5.9%
-tool           m365_mail_send         npm:pi-mcp-adapter      2710      5.4%
-tool           m365_contacts_list     npm:pi-mcp-adapter      2180      4.4%
+tool           acme_mail_search       npm:acme-office         4470      9.0%
+tool           acme_calendar_events   npm:acme-office         4020      8.1%
+tool           acme_chat_messages     npm:acme-office         3730      7.5%
+tool           acme_site_search       npm:acme-office         3520      7.1%
+tool           acme_files_search      npm:acme-office         3406      6.8%
+tool           acme_user_lookup       npm:acme-office         2940      5.9%
+tool           acme_mail_send         npm:acme-office         2710      5.4%
+tool           acme_contacts_list     npm:acme-office         2180      4.4%
 context_file   docs/architecture.md   local                   2130      4.3%
-tool           m365_drive_upload      npm:pi-mcp-adapter      1965      3.9%
+tool           acme_drive_upload      npm:acme-office         1965      3.9%
 ... and 30 more
 
 loaded at runtime this session                              tokens     share
 tool           read                   builtin                 8420     49.1%
-tool           web_fetch              npm:pi-web-access       5310     30.9%
+tool           acme_web_fetch         npm:acme-search         5310     30.9%
 tool           bash                   builtin                 2140     12.5%
 skill          deploy-checklist       auto                    1290      7.5%
 
